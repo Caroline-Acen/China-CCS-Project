@@ -1,0 +1,19 @@
+Dataset,Scenario group,Statistic,2025,2030,2035,2040,2045,2050
+EOR pipeline,Minimum,Minimum,66.48,57.02,47.14,35.6,32.12,27.53
+EOR pipeline,Minimum,Mean,590.99,71.65,51.14,36.45,32.24,27.53
+EOR pipeline,Minimum,Maximum,726.48,154.89,76.28,46.46,35.04,27.53
+EOR pipeline,Minimum,5th percentile,66.48,57.02,47.14,35.6,32.12,27.53
+EOR pipeline,Minimum,10th percentile,105.64,57.02,47.14,35.6,32.12,27.53
+EOR pipeline,Minimum,95th percentile,726.48,120.94,68.75,43.53,32.43,27.53
+EOR pipeline,Average,Minimum,72.75,63.99,51.67,37.34,37.34,31.36
+EOR pipeline,Average,Mean,574.78,78.62,55.67,38.19,37.46,31.36
+EOR pipeline,Average,Maximum,732.75,161.86,80.81,48.2,40.26,31.36
+EOR pipeline,Average,5th percentile,72.75,63.99,51.67,37.34,37.34,31.36
+EOR pipeline,Average,10th percentile,72.76,63.99,51.67,37.34,37.34,31.36
+EOR pipeline,Average,95th percentile,732.75,127.91,73.28,45.27,37.65,31.36
+EOR pipeline,Maximum,Minimum,1.56,70.94,56.2,47.43,42.56,35.19
+EOR pipeline,Maximum,Mean,832.15,85.57,60.2,48.28,42.68,35.19
+EOR pipeline,Maximum,Maximum,21525.76,168.81,85.34,58.29,45.48,35.19
+EOR pipeline,Maximum,5th percentile,79.01,70.94,56.2,47.43,42.56,35.19
+EOR pipeline,Maximum,10th percentile,79.01,70.94,56.2,47.43,42.56,35.19
+EOR pipeline,Maximum,95th percentile,2056.65,134.86,77.81,55.36,42.87,35.19

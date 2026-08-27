@@ -1,0 +1,27 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local scratch / logs
+*.log
+run_log.txt
+*_out.txt
+_risk_redo.txt
+
+# Large local archives (extracted content lives under data/)
+*.zip
+
+# Large data files
+data/industries.csv
+data/ss_scores/
+data/Risk_Assessment/CAFD400_V2023_1-Reprojected-5km-Intersection-Aggregate-GPSG-4326-Geom.csv

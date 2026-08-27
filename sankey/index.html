@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+
+    <title>China CO₂ Transport Sankey</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+
+    <link rel="stylesheet" href="style.css" />
+  </head>
+
+  <body>
+    <div id="container">
+      <h1>CO₂ Transport Network</h1>
+
+      <div id="subtitle">Source Provinces → Storage Provinces</div>
+
+      <div id="grid">
+        <div class="panel">
+          <h2>2025</h2>
+          <svg id="svg2025"></svg>
+        </div>
+
+        <div class="panel">
+          <h2>2030</h2>
+          <svg id="svg2030"></svg>
+        </div>
+
+        <div class="panel">
+          <h2>2035</h2>
+          <svg id="svg2035"></svg>
+        </div>
+
+        <div class="panel">
+          <h2>2040</h2>
+          <svg id="svg2040"></svg>
+        </div>
+
+        <div class="panel">
+          <h2>2045</h2>
+          <svg id="svg2045"></svg>
+        </div>
+
+        <div class="panel">
+          <h2>2050</h2>
+          <svg id="svg2050"></svg>
+        </div>
+      </div>
+
+      <div id="legend">
+        <div class="legendItem">
+          <div class="legendColor local"></div>
+
+          Integrated Local Storage Hub
+        </div>
+
+        <div class="legendItem">
+          <div class="legendColor export"></div>
+
+          Cross-Provincial Export Corridor
+        </div>
+      </div>
+    </div>
+
+    <script src="main.js"></script>
+  </body>
+</html>
