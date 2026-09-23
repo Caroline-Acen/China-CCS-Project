@@ -1,309 +1,246 @@
 """
-Figure 4a: Storage Potential and Industries Combined Map
-China map showing all industry categories overlaid with storage potential locations.
+Figure 4a: Seismic Screening Index (SSI) map
+China map showing locally-connected risk traces from seismic risk CSV data.
 """
 
 import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-import matplotlib.cm as cm
-from matplotlib.lines import Line2D
-from matplotlib.patches import Patch
-from shapely.ops import unary_union
-from textwrap import wrap
-import os
-import time
+import numpy as np
+from matplotlib.collections import LineCollection
+from matplotlib.colors import BoundaryNorm
+from matplotlib.cm import ScalarMappable
+from sklearn.neighbors import NearestNeighbors
 
-from config import (
-    DSA_PIPELINE,
-    EOR_PIPELINE,
-    INDUSTRIES_CSV,
-    NE_ADMIN0,
-    NE_ADMIN1,
-    chart_path,
-    data_path,
-    manuscript_font_bundle,
-)
+from config import NE_ADMIN0, NE_ADMIN1, chart_path, manuscript_font_bundle
+from seismic_risk import SSI_COLORBAR_LABEL, srf_listed_colormap, style_srf_colorbar
 
 
-def plot_storage_potential_and_industries(
-    dsa_pipeline, 
-    eor_pipeline,
-    industries_csv, 
-    admin0_path, 
+def plot_china_score_traces(
+    csv_path,
+    admin0_path,
     admin1_path,
-    output_path="storage_industry_map.png"
+    output_path="china_score_traces.png",
+    target_crs="ESRI:102012",
+    link_dist_m=60_000,
+    k_neighbors=4,
+    line_width=0.18,
+    line_alpha=1.0,
+    point_size=1.2,
+    point_alpha=1.0,
+    dpi=600,
 ):
     """
-    Plot storage potential and industry locations with 250km buffer overlap.
+    Plot China map with locally-connected risk traces from point CSV.
 
     Parameters:
-        dsa_pipeline: Path to DSA Pipeline Excel file
-        eor_pipeline: Path to EOR Pipeline Excel file
-        industries_csv: Path to industries CSV
+        csv_path: Path to CSV with lat, lon, final_risk_score, storage_potential columns
         admin0_path: Path to Natural Earth admin0 shapefile
         admin1_path: Path to Natural Earth admin1 shapefile
         output_path: Output image path
+        target_crs: Target coordinate reference system
+        link_dist_m: Maximum distance (meters) for connecting nearby points
+        k_neighbors: Number of nearest neighbors to consider
+        line_width: Width of trace lines
+        point_size: Size of scatter points
+        dpi: Output resolution
     """
 
-    t0 = time.perf_counter()
+    # Load and validate CSV data
+    df = pd.read_csv(csv_path, low_memory=False)
+    required = {"lat", "lon", "final_risk_score", "storage_potential"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"CSV missing required columns: {missing}")
 
-    def log_step(message):
-        elapsed = time.perf_counter() - t0
-        print(f"[{elapsed:8.2f}s] {message}")
+    df = df[list(required)].copy()
+    df = df.dropna(subset=["lat", "lon", "final_risk_score", "storage_potential"])
+    df["final_risk_score"] = pd.to_numeric(df["final_risk_score"], errors="coerce")
+    df["storage_potential"] = pd.to_numeric(df["storage_potential"], errors="coerce")
+    df = df.dropna(subset=["final_risk_score", "storage_potential"]).drop_duplicates()
 
-    log_step("Loading data...")
+    # Compute storage potential totals by risk class (convert Mt -> Gt)
+    low_total_gt = df.loc[df["final_risk_score"] <= 3, "storage_potential"].sum() / 1000.0
+    moderate_total_gt = df.loc[
+        (df["final_risk_score"] > 3) & (df["final_risk_score"] <= 6),
+        "storage_potential",
+    ].sum() / 1000.0
+    high_total_gt = df.loc[
+        (df["final_risk_score"] > 6) & (df["final_risk_score"] <= 9),
+        "storage_potential",
+    ].sum() / 1000.0
+    very_high_total_gt = df.loc[df["final_risk_score"] > 9, "storage_potential"].sum() / 1000.0
 
-    # Load Storage Potential
-    dsa_df = pd.read_excel(dsa_pipeline)
-    eor_df = pd.read_excel(eor_pipeline)
+    # Create GeoDataFrame
+    gdf = gpd.GeoDataFrame(
+        df,
+        geometry=gpd.points_from_xy(df["lon"], df["lat"]),
+        crs="EPSG:4326",
+    ).to_crs(target_crs)
 
-    dsa_gdf = gpd.GeoDataFrame(
-        dsa_df,
-        geometry=gpd.points_from_xy(dsa_df["X"], dsa_df["Y"]),
-        crs="EPSG:4326"
-    )
-    eor_gdf = gpd.GeoDataFrame(
-        eor_df,
-        geometry=gpd.points_from_xy(eor_df["X"], eor_df["Y"]),
-        crs="EPSG:4326"
-    )
-    
+    # Determine color scale range
+    vmin = 0
+    vmax = int(np.ceil(float(gdf["final_risk_score"].max())))
 
-    # Load Industries in chunks to avoid memory issues
-    categories = {
-        "TC19": "o",   # Transport
-        "ME19": "s",   # Manufacturing
-        "WF19": "^",   # Waste
-        "AF19": "D",   # Agriculture
-        "OM19": "P",   # Other industries
-        "MC19": "X",   # Mining
-        "PM19": "v",   # Paper
-        "PP19": "*",   # Power
-    }
-    # Only keep rows where any category column is > 0
-    chunk_list = []
-    log_step("Reading industries CSV in chunks...")
-    for idx, chunk in enumerate(pd.read_csv(industries_csv, low_memory=False, chunksize=100000), start=1):
-        filtered = chunk[chunk[list(categories.keys())].sum(axis=1) > 0]
-        chunk_list.append(filtered)
-        if idx % 20 == 0:
-            log_step(f"Processed {idx} chunks; retained rows so far: {sum(len(df) for df in chunk_list):,}")
-    ind_df = pd.concat(chunk_list, ignore_index=True)
+    # Load and filter boundaries to China only
+    admin0 = gpd.read_file(admin0_path).to_crs(target_crs)
+    admin1 = gpd.read_file(admin1_path).to_crs(target_crs)
 
-    # Filter rows where all categories are zero
-    ind_df = ind_df[ind_df[list(categories.keys())].sum(axis=1) > 0]
-    log_step(f"Filtered industries: {len(ind_df):,} rows kept")
+    china0 = None
+    for col in ["ADMIN", "NAME", "SOVEREIGNT", "ADM0NAME", "NAME_EN", "COUNTRY"]:
+        if col in admin0.columns:
+            china0 = admin0[admin0[col].astype(str).str.strip().str.lower().eq("china")]
+            if not china0.empty:
+                break
+    if china0 is None or china0.empty:
+        raise ValueError("China not found in admin0 shapefile.")
 
-    # Coordinate handling
-    x_min = ind_df["X"].min()
-    target_crs = "ESRI:102012"
-    already_projected = (abs(x_min) > 1000)
+    provinces = None
+    for col in ["admin", "ADM0NAME", "ADMIN", "SOVEREIGNT", "COUNTRY"]:
+        if col in admin1.columns:
+            provinces = admin1[admin1[col].astype(str).str.strip().str.lower().eq("china")]
+            if provinces is not None and not provinces.empty:
+                break
+    if provinces is None or provinces.empty:
+        provinces = admin1.copy()
 
-    if already_projected:
-        base_gdf = gpd.GeoDataFrame(
-            ind_df,
-            geometry=gpd.points_from_xy(ind_df["X"], ind_df["Y"]),
-            crs=target_crs
-        )
-    else:
-        base_gdf = gpd.GeoDataFrame(
-            ind_df,
-            geometry=gpd.points_from_xy(ind_df["X"], ind_df["Y"]),
-            crs="EPSG:4326"
-        )
+    # Clip provinces to China outline
+    try:
+        provinces = gpd.overlay(provinces, china0[["geometry"]], how="intersection")
+    except Exception:
+        provinces = provinces.copy()
+        provinces["geometry"] = provinces.geometry.buffer(0)
+        china_fixed = china0.copy()
+        china_fixed["geometry"] = china_fixed.geometry.buffer(0)
+        provinces = gpd.overlay(provinces, china_fixed[["geometry"]], how="intersection")
 
-    # Load shapefiles
-    admin0 = gpd.read_file(admin0_path)
-    admin1 = gpd.read_file(admin1_path)
-    
-    china = admin0[admin0["ADMIN"] == "China"]
-    if "admin" in admin1.columns:
-        provinces = admin1[admin1["admin"] == "China"]
-    elif "ADM0NAME" in admin1.columns:
-        provinces = admin1[admin1["ADM0NAME"] == "China"]
-    else:
-        provinces = gpd.GeoDataFrame(columns=admin1.columns, geometry=admin1.geometry.name)
-    
-    # Reproject all data
-    china = china.to_crs(target_crs)
-    provinces = provinces.to_crs(target_crs)
-    dsa_gdf = dsa_gdf.to_crs(target_crs)
-    eor_gdf = eor_gdf.to_crs(target_crs)
-    base_gdf = base_gdf.to_crs(target_crs)
+    # Low (0–3) greens → Moderate (3–6) blues → High / Very High (>6) reds
+    cmap, norm, boundaries = srf_listed_colormap(vmin, vmax)
 
+    # Build neighbor-based line segments
+    xy = np.column_stack([gdf.geometry.x.values, gdf.geometry.y.values])
+    scores = gdf["final_risk_score"].values
+    segments = []
+    seg_vals = []
 
-    # Compute 250km proximity region around storage points
-    log_step("Computing 250km buffers...")
-    storage_points = gpd.GeoDataFrame(
-        pd.concat([dsa_gdf, eor_gdf], ignore_index=True),
-        geometry="geometry",
-        crs=target_crs,
-    )
-    storage_union_buffer = unary_union(storage_points.geometry.buffer(250_000))
-    log_step("Storage buffer union built; selecting industries within 250km...")
+    n = len(xy)
+    if n >= 2:
+        k = min(k_neighbors, n)
+        nn = NearestNeighbors(n_neighbors=k, algorithm="auto")
+        nn.fit(xy)
+        dists, idxs = nn.kneighbors(xy)
 
-    # Chunked intersects avoids creating very large spatial-join intermediates
-    chunk_size = 250_000
-    mask_parts = []
-    total_rows = len(base_gdf)
-    for start in range(0, total_rows, chunk_size):
-        end = min(start + chunk_size, total_rows)
-        chunk_mask = base_gdf.geometry.iloc[start:end].intersects(storage_union_buffer)
-        mask_parts.append(chunk_mask)
-        processed = end
-        if processed % 1_000_000 == 0 or processed == total_rows:
-            log_step(f"Proximity scan progress: {processed:,}/{total_rows:,} rows")
-
-    within_250km_mask = pd.concat(mask_parts).sort_index()
-    industries_within_250km = base_gdf[within_250km_mask.values]
-    unique_industries_within_250km = len(industries_within_250km)
-    log_step(f"Unique industry rows within 250km: {unique_industries_within_250km:,}")
-
-    # Calculate industry type counts and percentages
-    industry_types = {
-        "TC19": "TC",
-        "ME19": "ME",
-        "WF19": "WF",
-        "AF19": "AF",
-        "OM19": "OM",
-        "MC19": "MC",
-        "PM19": "PM",
-        "PP19": "PP",
-    }
-    industry_keys = list(industry_types.keys())
-    industry_counts = {k: (industries_within_250km[k] > 0).sum() for k in industry_keys}
-    total_industry_types_within_250km = sum(industry_counts.values())
-    industry_percentages = {
-        k: (v / total_industry_types_within_250km * 100 if total_industry_types_within_250km > 0 else 0)
-        for k, v in industry_counts.items()
-    }
-
-    # Use the same >0 category-membership logic for totals so category sums align with summary totals.
-    total_category_assignments_within_250km = int((industries_within_250km[industry_keys] > 0).sum().sum())
-    total_category_assignments_all_industries = int((base_gdf[industry_keys] > 0).sum().sum())
-    category_assignments_within_250km_percentage = (
-        total_category_assignments_within_250km / total_category_assignments_all_industries * 100
-        if total_category_assignments_all_industries > 0 else 0
-    )
-    log_step(f"TOTAL_CATEGORY_ASSIGNMENTS_WITHIN_250KM: {total_category_assignments_within_250km:,}")
-
-    multi_category_rows = int(((industries_within_250km[industry_keys] > 0).sum(axis=1) > 1).sum())
-    log_step(f"Rows with multiple >0 categories within 250km: {multi_category_rows:,}")
-
-    # Prepare DataFrame and save CSV (tabular output lives under data/)
-    csv_path = data_path("storage_industry_map_industry_stats.csv")
-    industry_stats_df = pd.DataFrame(
-        {
-            "Industry Type": [industry_types[k] for k in industry_types.keys()],
-            "Count": [industry_counts[k] for k in industry_types.keys()],
-            "Percentage": [round(industry_percentages[k], 2) for k in industry_types.keys()],
-        }
-    )
-    summary_df = pd.DataFrame(
-        {
-            "Industry Type": [
-                "TOTAL_CATEGORY_ASSIGNMENTS_WITHIN_250KM",
-                "TOTAL_CATEGORY_ASSIGNMENTS_ALL_INDUSTRIES",
-                "PERCENTAGE_CATEGORY_ASSIGNMENTS_WITHIN_250KM",
-            ],
-            "Count": [
-                total_category_assignments_within_250km,
-                total_category_assignments_all_industries,
-                "",
-            ],
-            "Percentage": [
-                round(category_assignments_within_250km_percentage, 2),
-                100.0,
-                round(category_assignments_within_250km_percentage, 2),
-            ],
-        }
-    )
-    industry_stats_df = pd.concat([industry_stats_df, summary_df], ignore_index=True)
-    industry_stats_df.to_csv(csv_path, index=False)
-    log_step(f"[OK] Industry stats CSV saved to {csv_path}")
-
-    # Overlap polygons for plotting
-    overlap_geom = storage_union_buffer
-    overlap_gdf = gpd.GeoDataFrame(geometry=[overlap_geom], crs=target_crs)
+        for i in range(n):
+            for jpos in range(1, k):
+                j = idxs[i, jpos]
+                if dists[i, jpos] <= link_dist_m:
+                    segments.append([xy[i], xy[j]])
+                    seg_vals.append(scores[i])
 
     # Create figure
-    log_step("Creating plot...")
-    fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+    fig, ax = plt.subplots(figsize=(11, 7))
     mf = manuscript_font_bundle(fig.get_figwidth())
 
-    china.boundary.plot(ax=ax, color="black", linewidth=1)
-    provinces.boundary.plot(ax=ax, color="gray", linewidth=0.5, alpha=0.7)
+    # Plot boundaries
+    china0.boundary.plot(ax=ax, color="black", linewidth=1.0, zorder=1)
+    provinces.boundary.plot(ax=ax, color="0.75", linewidth=0.6, zorder=2)
 
-    # Color scale
-    max_val = base_gdf[list(categories.keys())].max().max()
-    bins = [0, 1, 2, 3, 4, 5, max_val]
-    labels = ["1", "2", "3", "4", "5", f">{5}"]
-    cmap = plt.get_cmap("YlOrRd", len(labels))
-    norm = mcolors.BoundaryNorm(boundaries=bins, ncolors=len(labels), clip=False)
+    # Set map extent
+    minx, miny, maxx, maxy = china0.total_bounds
+    pad_x = (maxx - minx) * 0.02
+    pad_y = (maxy - miny) * 0.02
+    ax.set_xlim(minx - pad_x, maxx + pad_x)
+    ax.set_ylim(miny - pad_y, maxy + pad_y)
 
-    # Plot industries by category
-    for cat, marker in categories.items():
-        subset = base_gdf[base_gdf[cat] > 0]
-        if subset.empty:
-            continue
-        subset.plot(
-            ax=ax,
-            markersize=40,
-            marker=marker,
-            c=subset[cat],
+    # Plot line segments
+    if segments:
+        lc = LineCollection(
+            segments,
             cmap=cmap,
             norm=norm,
-            alpha=0.7
+            linewidths=line_width,
+            alpha=line_alpha,
+            zorder=3,
+            rasterized=True,
         )
+        lc.set_array(np.asarray(seg_vals))
+        ax.add_collection(lc)
 
-    # Plot storage potentials
-    dsa_gdf.plot(ax=ax, color="green", markersize=25, alpha=0.7)
-    eor_gdf.plot(ax=ax, color="gray", markersize=25, alpha=0.7)
+    # Plot scatter points
+    ax.scatter(
+        gdf.geometry.x.values,
+        gdf.geometry.y.values,
+        c=scores,
+        cmap=cmap,
+        norm=norm,
+        s=point_size,
+        linewidths=0,
+        alpha=point_alpha,
+        zorder=4,
+        rasterized=True,
+    )
 
-    # Colorbar
-    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+    # Add colorbar
+    sm = ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
-    cbar = fig.colorbar(sm, ax=ax, orientation="vertical", fraction=0.03, pad=0.02)
-    cbar.set_ticks([(bins[i] + bins[i+1]) / 2 for i in range(len(labels))])
-    cbar.set_ticklabels(labels)
-    cbar.set_label("Number of Industries", fontsize=mf["colorbar_label"])
 
-    # Overlap region
-    if not overlap_gdf.empty:
-        overlap_gdf.plot(ax=ax, facecolor="none", edgecolor="blue",
-                         hatch="///", linewidth=0, alpha=0.5)
+    # Determine tick spacing
+    if vmax <= 12:
+        step = 1
+    elif vmax <= 25:
+        step = 2
+    elif vmax <= 50:
+        step = 5
+    else:
+        step = 10
 
-    # Legend
-    legend_elements = []
-    for cat, marker in categories.items():
-        legend_elements.append(Line2D([0], [0], marker=marker, color="w",
-                                      markerfacecolor="orange", markersize=mf["legend_marker"],
-                                      label=cat.replace("19", "")))
-    legend_elements.extend([
-        Patch(facecolor="green", edgecolor="black", label="DSA storage potential"),
-        Patch(facecolor="gray", edgecolor="black", label="EOR storage potential"),
-        Patch(facecolor="none", edgecolor="blue", hatch="///",
-              label="Industries and storage potential < 250km"),
-    ])
-    labels_wrapped = ["\n".join(wrap(elem.get_label(), 30)) for elem in legend_elements]
-    ax.legend(handles=legend_elements, labels=labels_wrapped,
-              loc="lower left", fontsize=mf["legend"], frameon=True)
+    ticks = list(np.arange(vmin, vmax + 1, step))
+    if ticks[0] != vmin:
+        ticks = [vmin] + ticks
+    if ticks[-1] != vmax:
+        ticks.append(vmax)
+
+    # Reserve right/bottom margins: colorbar label gap + room for risk summary
+    fig.subplots_adjust(left=0.02, right=0.80, top=0.98, bottom=0.24)
+    cax = fig.add_axes([0.83, 0.28, 0.018, 0.55])
+
+    cbar = plt.colorbar(
+        sm,
+        cax=cax,
+        orientation="vertical",
+        boundaries=boundaries,
+        ticks=ticks,
+        spacing="proportional",
+        drawedges=True,
+    )
+    style_srf_colorbar(
+        fig,
+        cbar,
+        SSI_COLORBAR_LABEL,
+        mf["colorbar_label"],
+        round(mf["colorbar_tick"] * 0.95, 1),
+        label_dx=0.04,
+    )
+
+    # Risk summary kept clear of the map (two lines)
+    legend_text = (
+        f"0≤SSI≤3 (Low Risk: {low_total_gt:,.2f} Gt) | "
+        f"3<SSI≤6 (Moderate Risk: {moderate_total_gt:,.2f} Gt) |\n"
+        f"6<SSI≤9 (High Risk: {high_total_gt:,.2f} Gt) | "
+        f"SSI>9 (Very High Risk: {very_high_total_gt:,.2f} Gt)"
+    )
+    fig.text(0.5, 0.055, legend_text, ha="center", va="center", fontsize=mf["legend"])
 
     ax.axis("off")
-    
-    plt.savefig(output_path, dpi=300, bbox_inches="tight")
-    plt.close()
-    log_step(f"[OK] Map saved to {output_path}")
+    plt.savefig(output_path, dpi=dpi, bbox_inches="tight", pad_inches=0.25)
+    plt.close(fig)
+    print(f"[OK] Map saved to {output_path}")
 
 
 # Run function
-plot_storage_potential_and_industries(
-    dsa_pipeline=str(DSA_PIPELINE),
-    eor_pipeline=str(EOR_PIPELINE),
-    industries_csv=str(INDUSTRIES_CSV),
+plot_china_score_traces(
+    csv_path="./data/Risk_Assessment/final_seismic_risk_factor_base_case.csv",
     admin0_path=str(NE_ADMIN0),
     admin1_path=str(NE_ADMIN1),
-    output_path=chart_path("storage_industry_map.png"),
+    output_path=chart_path("seismic_risk_factor_map.png"),
 )

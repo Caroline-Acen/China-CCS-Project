@@ -39,11 +39,11 @@ def _write_scenario(filename: str, scenario: RiskScenario) -> Path:
 
 def _plot_figures() -> None:
     scripts = [
-        "figure3a.py",
-        "figure3b.py",
-        "figure17_sup.py",
-        "figure18_sup.py",
-        "figure19_sup.py",
+        "figure4a.py",
+        "figure4b.py",
+        "sup_figure20.py",
+        "sup_figure21.py",
+        "sup_figure22.py",
     ]
     root = Path(__file__).resolve().parent
     ensure_charts_dir()

@@ -1,74 +1,137 @@
 """
-Figure 5b (submitted): Storage vs Injection Rate scatter — DSA and EOR.
-Reviewer fix: fitted regression line to support stated trend.
+Figure 4b: Risk vs Storage Capacity Bubble Chart
+Scatter plot showing Risk Factor vs Storage Capacity colored by storage type (DSA/EOR).
 """
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from config import DSA_PIPELINE, EOR_PIPELINE, chart_path, manuscript_font_bundle
+from config import chart_path, manuscript_font_bundle
 
 
-def plot_storage_vs_injection(
-    dsa_excel_path,
-    eor_excel_path,
-    output_path="storage_vs_injection.png",
+def plot_risk_vs_storage_bubble(
+    csv_path,
+    output_path="risk_capacity_tradeoff.png",
+    dsa_color="green",
+    eor_color="orange",
+    figsize=(14, 9),
+    s=55,
+    alpha=0.75,
     dpi=300,
+    font_design_width=None,
 ):
-    df_dsa = pd.read_excel(dsa_excel_path)
-    df_eor = pd.read_excel(eor_excel_path)
+    """
+    Create bubble chart: Risk Factor vs Storage Capacity.
 
-    storage_col = "Storage Potential"
-    injection_col = "Injection Rate"
+    Parameters:
+        csv_path: Path to CSV with storage_potential, final_risk_score, storage_type columns
+        output_path: Output image path
+        dsa_color: Color for DSA points
+        eor_color: Color for EOR points
+        figsize: Figure dimensions
+        s: Marker size
+        alpha: Marker transparency
+        dpi: Output resolution
+    """
 
-    fig, ax = plt.subplots(figsize=(10, 7))
-    mf = manuscript_font_bundle(fig.get_figwidth())
+    # Load and validate data
+    df = pd.read_csv(csv_path, low_memory=False)
+    required = {"storage_potential", "final_risk_score", "storage_type"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
 
-    for df, color, label in [(df_eor, "orange", "EOR"), (df_dsa, "green", "DSA")]:
-        mask = (df[storage_col] > 0) & (df[injection_col] > 0)
-        subset = df.loc[mask]
+    # Clean data
+    df = df[["storage_potential", "final_risk_score", "storage_type"]].copy()
+    df["storage_potential"] = pd.to_numeric(df["storage_potential"], errors="coerce")
+    df["final_risk_score"] = pd.to_numeric(df["final_risk_score"], errors="coerce")
+    df["storage_type"] = df["storage_type"].astype(str).str.strip()
+    df = df.dropna(subset=["storage_potential", "final_risk_score", "storage_type"])
+
+    # Split by storage type
+    dsa = df[df["storage_type"].str.upper() == "DSA"]
+    eor = df[df["storage_type"].str.upper() == "EOR"]
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=figsize)
+    mf = manuscript_font_bundle(
+        font_design_width if font_design_width is not None else fig.get_figwidth()
+    )
+
+    if not dsa.empty:
         ax.scatter(
-            subset[storage_col],
-            subset[injection_col],
-            c=color,
-            s=30,
-            alpha=0.55,
-            label=label,
-            edgecolors="none",
+            dsa["storage_potential"], 
+            dsa["final_risk_score"],
+            s=s, 
+            c=dsa_color, 
+            alpha=alpha,
+            label="DSA"
         )
 
-        if len(subset) >= 2:
-            x = subset[storage_col].to_numpy()
-            y = subset[injection_col].to_numpy()
-            slope, intercept = np.polyfit(x, y, 1)
-            x_line = np.linspace(x.min(), x.max(), 100)
+        if len(dsa) >= 2:
+            x = dsa["storage_potential"].to_numpy(dtype=float)
+            y = dsa["final_risk_score"].to_numpy(dtype=float)
+            m, b = np.polyfit(x, y, 1)
+            x_line = np.linspace(x.min(), x.max(), 200)
+            y_line = m * x_line + b
             ax.plot(
                 x_line,
-                slope * x_line + intercept,
-                color=color,
-                linewidth=2,
+                y_line,
+                color=dsa_color,
                 linestyle="--",
-                alpha=0.9,
-                label=f"{label} linear fit",
+                linewidth=2.2,
+                alpha=0.95,
+                label=f"DSA fit (y={m:.3f}x+{b:.2f})",
             )
 
-    ax.set_xlabel("Total Storage Capacity (Mt CO$_2$)", fontsize=mf["label"])
-    ax.set_ylabel("Injection Rate Capacity (Mt CO$_2$ / year)", fontsize=mf["label"])
-    ax.set_xlim(0, 350)
-    ax.set_ylim(0, 325)
-    ax.legend(loc="upper right", fontsize=mf["legend"])
+    if not eor.empty:
+        ax.scatter(
+            eor["storage_potential"], 
+            eor["final_risk_score"],
+            s=s, 
+            c=eor_color, 
+            alpha=alpha,
+            label="EOR"
+        )
+
+        if len(eor) >= 2:
+            x = eor["storage_potential"].to_numpy(dtype=float)
+            y = eor["final_risk_score"].to_numpy(dtype=float)
+            m, b = np.polyfit(x, y, 1)
+            x_line = np.linspace(x.min(), x.max(), 200)
+            y_line = m * x_line + b
+            ax.plot(
+                x_line,
+                y_line,
+                color=eor_color,
+                linestyle="--",
+                linewidth=2.2,
+                alpha=0.95,
+                label=f"EOR fit (y={m:.3f}x+{b:.2f})",
+            )
+
+    # Format axes
+    ax.set_xlabel("Storage Capacity (Mt CO$_2$)", fontsize=mf["label"], fontweight="bold")
+    ax.set_ylabel("Risk Factor", fontsize=mf["label"], fontweight="bold")
     ax.tick_params(axis="both", labelsize=mf["tick"])
+    ax.legend(loc="upper right", frameon=True, fontsize=mf["legend"])
+    ax.set_xlim(0, 350)
+    ax.set_ylim(bottom=0)
 
     plt.tight_layout()
-    plt.savefig(output_path, dpi=dpi, bbox_inches="tight")
+    plt.savefig(output_path, dpi=dpi)
     plt.close(fig)
-    print(f"[OK] Saved scatter plot to {output_path}")
+    print(f"[OK] Saved bubble chart to {output_path}")
 
 
+# Run function
 if __name__ == "__main__":
-    plot_storage_vs_injection(
-        dsa_excel_path=str(DSA_PIPELINE),
-        eor_excel_path=str(EOR_PIPELINE),
-        output_path=chart_path("storage_vs_injection.png"),
+    _CSV = "./data/Risk_Assessment/final_seismic_risk_factor_base_case.csv"
+    _FIGSIZE_WIDE = (14, 9)
+
+    plot_risk_vs_storage_bubble(
+        csv_path=_CSV,
+        output_path=chart_path("risk_storage_bubble.png"),
+        figsize=_FIGSIZE_WIDE,
     )

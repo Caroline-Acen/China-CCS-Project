@@ -16,7 +16,7 @@ Workflow (strictly sequential, one industry group × year at a time):
     3. Plot    → charts/sink_suitability_pareto.png (or _bivariate.png)
                → data/sink_suitability_summary.csv
 
-Does not modify figure4a.py / storage_industry_map.png.
+Does not modify figure5a.py / storage_industry_map.png.
 """
 
 from __future__ import annotations
@@ -593,7 +593,8 @@ def plot_map_panels(
     vmin, vmax = _map_color_limits(years, categories, combined_path)
 
     fig, axes = plt.subplots(nrows, ncols, figsize=(20, 12))
-    mf = manuscript_font_bundle(fig.get_figwidth(), target_pt=9.0)
+    # Match Figure 5b print size at shared manuscript width
+    mf = manuscript_font_bundle(fig.get_figwidth(), target_pt=8.0)
     axes = np.atleast_1d(axes).flatten()
     mappable_row1 = None
     mappable_row2 = None

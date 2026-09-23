@@ -17,6 +17,7 @@ Thumbs.db
 run_log.txt
 *_out.txt
 _risk_redo.txt
+cost_map_regen_log.txt
 
 # Large local archives (extracted content lives under data/)
 *.zip

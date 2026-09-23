@@ -8,8 +8,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from config import manuscript_font_bundle
-
 
 def create_carbon_contribution_barcharts(
     file_path,
@@ -19,7 +17,7 @@ def create_carbon_contribution_barcharts(
     per_province_height=0.34,
     min_subplot_height=6.0,
     left_margin=0.28,
-    dpi=600
+    dpi=300
 ):
     """
     Create 6 horizontal bar charts (2x3 grid) showing Carbon Contributions by province.
@@ -59,12 +57,12 @@ def create_carbon_contribution_barcharts(
     fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h), dpi=dpi)
     axes = axes.flatten()
 
-    # Font sizes (manuscript 7pt rule at design width)
-    mf = manuscript_font_bundle(fig_w)
-    title_fs = mf["title"]
-    label_fs = mf["label"]
-    tick_fs = mf["tick"]
-    barlabel_fs = mf["body"]
+    # Do not scale type with the 22" canvas — that produced ~24 pt labels that
+    # overflow 31 stacked province rows. Use compact sizes that fit one row.
+    title_fs = 16.8
+    label_fs = 15.4
+    tick_fs = 12.6
+    barlabel_fs = 11.2
 
     # Plot each year
     for i, (year_col, year_label) in enumerate(zip(year_cols, year_labels)):
