@@ -29,7 +29,7 @@ SCRIPTS = [
     "figure4b.py",
     "figure5a.py",
     "figure5b.py",
-    "figure6a.py",
+    "figure6a-b.py",
     "figure6c.py",
     "figure7.py",
     "figure9.py",

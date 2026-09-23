@@ -71,7 +71,7 @@ charts/high_resolution/ # paper IDs, ≥3000 px on each edge (except SF24, copie
 data/                   # inputs and derived tables
 ```
 
-`charts/` keeps descriptive PNG/HTML names. `charts/high_resolution/` uses manuscript IDs. Python scripts use the same IDs (`python figure4b.py`, `python sup_figure1.py`). Where two panels share a script, a short wrapper exists for the other ID (e.g. `figure8.py` runs `figure7.py`).
+`charts/` keeps descriptive PNG/HTML names. `charts/high_resolution/` uses manuscript IDs. Python scripts use the same IDs (`python figure4b.py`, `python sup_figure1.py`). Where two panels share a script, a short wrapper exists for the other ID (e.g. `figure8.py` runs `figure7.py`). Figure 6a–b is one two-panel file from `figure6a-b.py`.
 
 | Paper file | Source in `charts/` |
 |---|---|
@@ -82,7 +82,7 @@ data/                   # inputs and derived tables
 | `figure4b.png` | `risk_storage_bubble.png` (journal pixels in high-res) |
 | `figure5a.png` | `storage_industry_map.png` |
 | `figure5b.png` | `sink_suitability_map_panels.png` |
-| `figure6a.png` / `figure6b.png` / `figure6c.png` | `storage_comparison_dsa.png`, `storage_comparison_eor.png`, `injection_unabated.png` |
+| `figure6a-b.png` / `figure6c.png` | `figure6a-b.png`, `injection_unabated.png` |
 | `figure7.html` / `figure8.html` | `DSA_Sankey_Plot.html`, `EOR_Sankey_Plot.html` |
 | `figure9a.png` / `figure9b.png` | `gasfield_sink_combined_gate_map.png`, `hydrogen_hub_cost_supply_curve.png` |
 | `figure10a.png` / `figure10b.png` | `Carbon_DSA_bubble_chart.png`, `Carbon_EOR_bubble_chart.png` |

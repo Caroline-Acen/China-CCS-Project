@@ -27,8 +27,7 @@ PAPER_PNGS: dict[str, str] = {
     "figure4b.png": "risk_storage_bubble.png",
     "figure5a.png": "storage_industry_map.png",
     "figure5b.png": "sink_suitability_map_panels.png",
-    "figure6a.png": "storage_comparison_dsa.png",
-    "figure6b.png": "storage_comparison_eor.png",
+    "figure6a-b.png": "figure6a-b.png",
     "figure6c.png": "injection_unabated.png",
     "figure9a.png": "gasfield_sink_combined_gate_map.png",
     "figure9b.png": "hydrogen_hub_cost_supply_curve.png",
@@ -68,6 +67,7 @@ PAPER_HTML: dict[str, str] = {
 COPY_AS_IS: dict[str, str] = {
     "sup_figure24a.png": "sup_figure24a.png",
     "sup_figure24b.png": "sup_figure24b.png",
+    "figure6a-b.png": "figure6a-b.png",
 }
 
 OPTIONAL_PNGS: dict[str, str] = {
